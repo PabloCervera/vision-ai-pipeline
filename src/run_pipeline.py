@@ -2,6 +2,7 @@ import cv2
 from detection.yolo_detector import YOLODetector
 from capture.video_source import VideoSource, VideoSourceError
 from detection.tracker import Tracker
+from detection.event_detector import EventDetector
 
 def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
     """
@@ -15,6 +16,7 @@ def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
     """
     detector = YOLODetector(model_path=model_path, confidence=confidence)
     tracker = Tracker(max_age=30)
+    event_detector = EventDetector(static_threshold=30)
     with VideoSource(video_source) as source:
         while True:
             try:
@@ -28,6 +30,7 @@ def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
                 
+                event_detector.update(tracks)
                 
             except VideoSourceError as e:
                 print(f"Error al procesar el frame: {e}")
