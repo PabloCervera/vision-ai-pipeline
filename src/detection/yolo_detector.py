@@ -6,21 +6,13 @@ Este módulo define la clase YOLODetector, que encapsula la lógica para cargar 
 import cv2
 from ultralytics import YOLO
 from detection.detection import Detection
+from utils import COLORS
 
 class YOLODetector:
     """
     Clase para manejar la detección de objetos utilizando el modelo YOLO.
     Esta clase encapsula la lógica para cargar el modelo YOLO y realizar detecciones en imágenes.
     """
-    
-    COLORS = [
-        (0, 255, 0),    # verde
-        (0, 0, 255),    # rojo
-        (255, 0, 0),    # azul
-        (0, 255, 255),  # amarillo
-        (255, 0, 255),  # magenta
-        (255, 165, 0),  # naranja
-    ]
     
     def __init__(self, model_path="yolov8n.pt", confidence=0.5):
         self.confidence = confidence
@@ -60,7 +52,7 @@ class YOLODetector:
         """
         frame = frame.copy()
         for det in detections:
-            color = self.COLORS[det.class_id % len(self.COLORS)]
+            color = COLORS[det.class_id % len(COLORS)]
             cv2.rectangle(frame, (det.x1, det.y1), (det.x2, det.y2), color, 2)
             cv2.putText(frame, f"{det.class_name} {det.confidence:.2f}", (det.x1, det.y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         return frame

@@ -1,6 +1,7 @@
 import cv2
 from detection.yolo_detector import YOLODetector
 from capture.video_source import VideoSource, VideoSourceError
+from detection.tracker import Tracker
 
 def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
     """
@@ -13,22 +14,25 @@ def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
         confidence: Umbral de confianza para las detecciones.
     """
     detector = YOLODetector(model_path=model_path, confidence=confidence)
-    
+    tracker = Tracker(max_age=30)
     with VideoSource(video_source) as source:
         while True:
             try:
                 frame = source.read()   
-                frame = cv2.resize(frame, (1708, 960))             
+                frame = cv2.resize(frame, (1708, 960))
                 detections = detector.detect(frame)
-                frame = detector.annotate(frame, detections)
+                tracks = tracker.update(detections, frame)
+                annotated_frame = tracker.annotate(frame, tracks)
                     
-                cv2.imshow("Detections", frame)
+                cv2.imshow("Detections", annotated_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
+                
                 
             except VideoSourceError as e:
                 print(f"Error al procesar el frame: {e}")
                 break
+        cv2.destroyAllWindows()
             
 if __name__ == "__main__":
     run_pipeline(video_source="test.mp4", confidence=0.3)
