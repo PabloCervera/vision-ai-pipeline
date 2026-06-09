@@ -19,7 +19,7 @@ class EventDetector:
         """
         Actualiza el historial de posiciones con los nuevos tracks y detecta eventos basados en el movimiento.
         """
-        
+        static_objects = []
         for track in tracks:
             if track.is_confirmed():
                 track_id = track.track_id
@@ -36,6 +36,7 @@ class EventDetector:
                     last = self.positions[track_id][-1]
                     distance = math.sqrt((last[0] - first[0]) ** 2 + (last[1] - first[1]) ** 2)
                     if distance < self.max_distance:
-                        print(f"Objeto {track_id} estático por {self.static_threshold} frames.")
+                        static_objects.append({"track_id": track_id, "center": (center_x, center_y)})
         
+        return static_objects
         

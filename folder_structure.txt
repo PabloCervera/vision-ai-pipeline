@@ -1,0 +1,23 @@
+vision-ai-pipeline/
+├── src/
+│   ├── capture/
+│   │   └── video_source.py       # abstracción webcam/fichero/RTSP
+│   ├── detection/
+│   │   ├── yolo_detector.py      # wrapper YOLOv8
+│   │   └── tracker.py            # DeepSORT + lógica de eventos
+│   ├── ai/
+│   │   ├── scene_analyzer.py     # LangChain + Groq Vision
+│   │   ├── alert_agent.py        # agente con memoria de contexto
+│   │   └── qa_chain.py           # chat Q&A sobre la escena
+│   ├── storage/
+│   │   └── event_store.py        # SQLite para historial
+│   └── api/
+│       └── main.py               # FastAPI + WebSocket
+├── dashboard/
+│   └── app.py                    # Streamlit
+├── notifier/
+│   └── telegram_bot.py
+├── tests/
+├── docker-compose.yml
+├── Dockerfile
+└── requirements.txt
