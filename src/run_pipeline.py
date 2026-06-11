@@ -1,3 +1,5 @@
+from asyncio import events
+
 import cv2
 import time
 from detection.yolo_detector import YOLODetector
@@ -6,7 +8,7 @@ from detection.tracker import Tracker
 from detection.event_detector import EventDetector
 from alert_agent import agent
 
-def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
+def run_pipeline(video_source=0, events=None, model_path="yolov8n.pt", confidence=0.5):
     """
     Función principal para ejecutar la pipeline de visión por computadora.
     Esta función abre la fuente de video, carga el modelo YOLO y procesa cada frame para detectar objetos.
@@ -48,9 +50,10 @@ def run_pipeline(video_source=0, model_path="yolov8n.pt", confidence=0.5):
                             "alert_message": ""
                         })
                         print(result["alert_message"])
+                        if events is not None:
+                            events.append({"alert": result["alert_message"]})
                         last_analysis_time = now
                     
-                
             except VideoSourceError as e:
                 print(f"Error al procesar el frame: {e}")
                 break

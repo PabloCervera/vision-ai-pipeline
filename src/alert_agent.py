@@ -1,3 +1,7 @@
+"""
+Este módulo define un agente de alerta que analiza la escena, evalúa el nivel de riesgo y genera alertas en función de la información obtenida. Utiliza un modelo de lenguaje para describir la escena y determinar el nivel de riesgo,
+ y luego decide si enviar una alerta o ignorar la situación.
+"""
 
 from typing import TypedDict
 from dotenv import load_dotenv
