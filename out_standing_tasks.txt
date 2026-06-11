@@ -1,0 +1,2 @@
+Almacenar los eventos y avisos en base de datos
+Integrar Bot de Telegram para 

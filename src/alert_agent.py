@@ -3,9 +3,8 @@ from typing import TypedDict
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, END
 from scene_analyzer import SceneAnalyzer
-
-
 
 class AgentState(TypedDict):
     frame: object
@@ -54,3 +53,30 @@ def ignore(state: AgentState) -> dict:
     Acción de ignorar, no realiza ninguna operación.
     """
     return {}
+
+
+graph = StateGraph(AgentState)
+
+# Añadir nodos
+graph.add_node("analyze_scene", analyze_scene)
+graph.add_node("decide_risk", decide_risk)
+graph.add_node("send_alert", send_alert)
+graph.add_node("ignore", ignore)
+
+# Punto de entrada
+graph.set_entry_point("analyze_scene")
+
+# Aristas fijas
+graph.add_edge("analyze_scene", "decide_risk")
+
+# Arista condicional: según risk_level va a send_alert o ignore
+graph.add_conditional_edges(
+    "decide_risk",
+    lambda state: state["risk_level"] if state["risk_level"] in ["high", "medium"] else "low",
+    {"high": "send_alert", "medium": "send_alert", "low": "ignore"}
+)
+
+graph.add_edge("send_alert", END)
+graph.add_edge("ignore", END)
+
+agent = graph.compile()
