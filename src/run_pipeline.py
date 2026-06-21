@@ -55,11 +55,7 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yol
                         if events is not None:
                             if result["risk_level"] in ("medium", "high"):
                                 for obj in static_objects:
-                                    events.append({
-                                        "track_id": obj["track_id"],
-                                        "alert": result["alert_message"],
-                                        "risk_level": result["risk_level"]
-                                    })
+                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"])
                         last_analysis_time = now
                     
             except VideoSourceError as e:

@@ -2,12 +2,13 @@ import asyncio
 import threading
 import cv2
 from run_pipeline import run_pipeline
+from database.event_store import EventStore
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import Response
 from contextlib import asynccontextmanager
 from starlette.websockets import WebSocketDisconnect
 
-events = []
+event_store = EventStore()
 latest_frame = [None]
 
 @asynccontextmanager
@@ -25,15 +26,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 def iniciar_pipeline():
-    run_pipeline(video_source="test.mp4", events=events, latest_frame=latest_frame)
+    run_pipeline(video_source="test.mp4", events=event_store, latest_frame=latest_frame)
 
 @app.get("/events")
 def get_events():
-    return {"events": events}
+    return {"events": event_store.get_all_events()}
 
 @app.get("/status")
 def get_status():
-    return {"status": "running", "total_events": len(events)}
+    return {"status": "running", "total_events": len(event_store.get_all_events())}
 
 @app.get("/latest_frame")
 def get_latest_frame():
