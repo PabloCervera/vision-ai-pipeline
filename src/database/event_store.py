@@ -6,7 +6,6 @@ el ID del objeto rastreado, el mensaje de alerta y el nivel de riesgo asociado.
 """
 
 import sqlite3
-from datetime import datetime
 
 
 class EventStore:
@@ -24,18 +23,18 @@ class EventStore:
                 timestamp TEXT NOT NULL,
                 track_id TEXT NOT NULL,
                 alert TEXT NOT NULL,
-                risk_level TEXT NOT NULL
+                risk_level TEXT NOT NULL, 
+                frame_path TEXT NOT NULL
             )
         """)
         self._conn.commit()
         
-    def add_event(self, track_id, alert, risk_level):
+    def add_event(self, track_id, alert, risk_level, timestamp, frame_path):
         """Añade un nuevo evento a la base de datos."""
-        timestamp = datetime.now().isoformat()
         self._conn.execute("""
-            INSERT INTO events (timestamp, track_id, alert, risk_level)
-            VALUES (?, ?, ?, ?)
-        """, (timestamp, track_id, alert, risk_level))
+            INSERT INTO events (timestamp, track_id, alert, risk_level, frame_path)
+            VALUES (?, ?, ?, ?, ?)
+        """, (timestamp, track_id, alert, risk_level, frame_path))
         self._conn.commit()
         
     def get_all_events(self):
@@ -47,3 +46,8 @@ class EventStore:
         """Elimina todos los eventos de la base de datos."""
         self._conn.execute("DELETE FROM events")
         self._conn.commit()
+        
+    def get_recent_events(self, limit=20):
+        """Recupera los eventos más recientes, limitados en cantidad."""
+        cursor = self._conn.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+        return [dict(row) for row in cursor.fetchall()]

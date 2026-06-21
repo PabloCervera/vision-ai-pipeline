@@ -1,12 +1,13 @@
-from asyncio import events
-
 import cv2
 import time
+import os
 from detection.yolo_detector import YOLODetector
 from capture.video_source import VideoSource, VideoSourceError
 from detection.tracker import Tracker
 from detection.event_detector import EventDetector
 from alert_agent import agent
+from datetime import datetime
+
 
 def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yolov8n.pt", confidence=0.5):
     """
@@ -24,6 +25,9 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yol
     
     last_analysis_time = 0
     analysis_interval = 10 
+    folder_path = "../data/event_frames/"
+    
+    os.makedirs(folder_path, exist_ok=True)
         
     with VideoSource(video_source) as source:
         while True:
@@ -55,7 +59,10 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yol
                         if events is not None:
                             if result["risk_level"] in ("medium", "high"):
                                 for obj in static_objects:
-                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"])
+                                    timestamp = datetime.now().isoformat()
+                                    filename = f"{obj['track_id']}_{timestamp.replace(':', '-')}.jpg"
+                                    cv2.imwrite(folder_path + filename, frame)
+                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"], timestamp=timestamp, frame_path=folder_path + filename)
                         last_analysis_time = now
                     
             except VideoSourceError as e:
