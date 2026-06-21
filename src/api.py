@@ -3,6 +3,7 @@ import threading
 import cv2
 from run_pipeline import run_pipeline
 from fastapi import FastAPI, WebSocket
+from fastapi.responses import Response
 from contextlib import asynccontextmanager
 from starlette.websockets import WebSocketDisconnect
 
@@ -33,6 +34,13 @@ def get_events():
 @app.get("/status")
 def get_status():
     return {"status": "running", "total_events": len(events)}
+
+@app.get("/latest_frame")
+def get_latest_frame():
+    if latest_frame[0] is None:
+        return Response(status_code=204)  
+    _, buffer = cv2.imencode(".jpg", latest_frame[0])
+    return Response(content=buffer.tobytes(), media_type="image/jpeg")
 
 @app.websocket("/stream")
 async def stream_events(websocket: WebSocket):
