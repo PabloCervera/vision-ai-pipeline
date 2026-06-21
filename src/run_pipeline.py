@@ -8,7 +8,7 @@ from detection.tracker import Tracker
 from detection.event_detector import EventDetector
 from alert_agent import agent
 
-def run_pipeline(video_source=0, events=None, model_path="yolov8n.pt", confidence=0.5):
+def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yolov8n.pt", confidence=0.5):
     """
     Función principal para ejecutar la pipeline de visión por computadora.
     Esta función abre la fuente de video, carga el modelo YOLO y procesa cada frame para detectar objetos.
@@ -33,6 +33,8 @@ def run_pipeline(video_source=0, events=None, model_path="yolov8n.pt", confidenc
                 detections = detector.detect(frame)
                 tracks = tracker.update(detections, frame)
                 annotated_frame = tracker.annotate(frame, tracks)
+                if latest_frame is not None:
+                    latest_frame[0] = annotated_frame.copy()
                     
                 cv2.imshow("Detections", annotated_frame)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -49,9 +51,15 @@ def run_pipeline(video_source=0, events=None, model_path="yolov8n.pt", confidenc
                             "risk_level": "",
                             "alert_message": ""
                         })
-                        print(result["alert_message"])
+
                         if events is not None:
-                            events.append({"alert": result["alert_message"]})
+                            if result["risk_level"] in ("medium", "high"):
+                                for obj in static_objects:
+                                    events.append({
+                                        "track_id": obj["track_id"],
+                                        "alert": result["alert_message"],
+                                        "risk_level": result["risk_level"]
+                                    })
                         last_analysis_time = now
                     
             except VideoSourceError as e:

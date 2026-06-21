@@ -43,7 +43,16 @@ def decide_risk(state: AgentState) -> dict:
             {"type": "text", "text": prompt},
         ])
     risk_level = llm.invoke([message])
-    return {"risk_level": risk_level.content.strip().lower()}
+    raw = risk_level.content.strip().lower()
+    
+    if "high" in raw:
+        risk_level = "high"
+    elif "medium" in raw:
+        risk_level = "medium"
+    else:
+        risk_level = "low"
+    
+    return {"risk_level": risk_level}
 
 def send_alert(state: AgentState) -> dict:
     """
