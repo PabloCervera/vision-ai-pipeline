@@ -3,12 +3,18 @@ import threading
 import cv2
 from run_pipeline import run_pipeline
 from database.event_store import EventStore
+from qa_chain import QAChain
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import Response
 from contextlib import asynccontextmanager
 from starlette.websockets import WebSocketDisconnect
+from pydantic import BaseModel
+
+class Question(BaseModel):
+    text: str
 
 event_store = EventStore()
+qa_chain = QAChain()
 latest_frame = [None]
 
 @asynccontextmanager
@@ -55,3 +61,8 @@ async def stream_events(websocket: WebSocket):
     except WebSocketDisconnect:
         print("Cliente desconectado del stream")
 
+@app.post("/ask")
+def ask_question(question: Question):
+    events = event_store.get_recent_events(limit=20)
+    answer = qa_chain.ask(question.text, events)
+    return {"answer": answer}
