@@ -9,7 +9,7 @@ from alert_agent import agent
 from datetime import datetime
 
 
-def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yolov8n.pt", confidence=0.5):
+def run_pipeline(video_source=0, events=None, latest_frame=None, stop_event=None, model_path="yolov8n.pt", confidence=0.5):
     """
     Función principal para ejecutar la pipeline de visión por computadora.
     Esta función abre la fuente de video, carga el modelo YOLO y procesa cada frame para detectar objetos.
@@ -30,7 +30,7 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, model_path="yol
     os.makedirs(folder_path, exist_ok=True)
         
     with VideoSource(video_source) as source:
-        while True:
+        while stop_event is None or not stop_event.is_set():
             try:
                 frame = source.read()   
                 frame = cv2.resize(frame, (1708, 960))
