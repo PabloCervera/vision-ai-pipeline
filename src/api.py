@@ -51,7 +51,11 @@ def get_events():
 
 @app.get("/status")
 def get_status():
-    return {"status": "running", "total_events": len(event_store.get_all_events())}
+    is_running = pipeline_thread is not None and pipeline_thread.is_alive()
+    return {
+        "status": "running" if is_running else "stopped",
+        "total_events": len(event_store.get_all_events())
+    }
 
 @app.get("/latest_frame")
 def get_latest_frame():
@@ -95,3 +99,8 @@ def start_pipeline(video: VideoPath):
 def stop_pipeline():
     stop_event.set()
     return {"status": "stopped"}
+
+@app.post("/clear_events")
+def clear_events():
+    event_store.clear_events()
+    return {"status": "cleared"}
