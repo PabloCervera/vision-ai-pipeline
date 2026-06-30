@@ -1,0 +1,28 @@
+services:
+  api:
+    build: .
+    image: vision-ai-pipeline:latest
+    working_dir: /app/src
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                      # aporta GROQ_API_KEY
+    volumes:
+      - app-data:/app/data        # uploads, capturas y base de datos persistentes
+
+  dashboard:
+    image: vision-ai-pipeline:latest
+    working_dir: /app
+    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000   # la API es alcanzable por el nombre del servicio
+    volumes:
+      - app-data:/app/data        # mismo volumen para leer las capturas de los eventos
+    depends_on:
+      - api
+
+volumes:
+  app-data:

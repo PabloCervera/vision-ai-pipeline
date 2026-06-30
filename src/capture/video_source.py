@@ -10,6 +10,10 @@ class VideoSourceError(Exception):
     """Excepción personalizada para errores relacionados con la fuente de video."""
     pass
 
+class EndOfStream(VideoSourceError):
+    """Señala el fin normal de la fuente de vídeo (no quedan más frames)."""
+    pass
+
 class VideoSource:
     """
     Clase para manejar la fuente de video (cámara o archivo).
@@ -52,13 +56,14 @@ class VideoSource:
             Tuple[bool, np.ndarray]: Un booleano que indica si se leyó correctamente y el frame leído (en formato BGR).
 
         Raises:
-            VideoSourceError: si la fuente no está abierta o no se pudo leer un frame.
+            VideoSourceError: si la fuente no está abierta.
+            EndOfStream: si no quedan más frames (fin del vídeo).
         """
         if not self._cap or not self._cap.isOpened():
             raise VideoSourceError("La fuente de video no está abierta.")
         ret, frame = self._cap.read()
         if not ret:
-            raise VideoSourceError("No se pudo leer un frame de la fuente.")
+            raise EndOfStream("Fin del vídeo: no quedan más frames.")
         return frame
 
     def frame_count(self):

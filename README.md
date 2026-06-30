@@ -51,7 +51,7 @@ Combina:
 2. Cada frame se redimensiona y pasa por **YOLODetector** → lista de `Detection`.
 3. **Tracker** (DeepSORT) asigna un ID estable a cada objeto entre frames y anota el frame.
 4. **EventDetector** mantiene el historial de posiciones de cada track y detecta los que llevan estáticos un nº de frames (posible objeto abandonado, persona inmóvil, etc.).
-5. Si hay objetos estáticos —y respetando un intervalo mínimo entre análisis (`analysis_interval = 10s`)— se invoca el **agente de IA**.
+5. Si hay objetos estáticos —y respetando un intervalo mínimo entre análisis (`analysis_interval = 10s`)— se **encola** un trabajo de análisis. La llamada al LLM corre en un **hilo aparte** para no bloquear la captura, de modo que el vídeo se sigue procesando con fluidez.
 6. El agente describe la escena, decide el riesgo y, si es **medio o alto**, guarda la captura en disco y registra el evento en la base de datos.
 
 ### El agente de alerta ([src/ai/alert_agent.py](src/ai/alert_agent.py))
@@ -99,6 +99,9 @@ vision-ai-pipeline/
 ├── data/                        # Datos generados en ejecución (no versionado)
 ├── tests/                       # Tests unitarios (pytest)
 ├── pytest.ini
+├── Dockerfile                   # Imagen del proyecto
+├── docker-compose.yml           # Orquestación de API + dashboard
+├── .env.example                 # Plantilla de variables de entorno
 ├── requirements.txt
 └── README.md
 ```
@@ -183,6 +186,25 @@ Tests unitarios de la lógica de dominio (detección de objetos estáticos y per
 
 ---
 
+## Ejecución con Docker
+
+Levanta la API y el dashboard como dos servicios con un solo comando:
+
+```bash
+# 1. Configura tu clave de Groq
+cp .env.example .env        # y edita GROQ_API_KEY
+
+# 2. Construye y arranca
+docker compose up --build
+```
+
+- Dashboard: [http://localhost:8501](http://localhost:8501)
+- API: [http://localhost:8000](http://localhost:8000)
+
+Ambos servicios comparten un volumen `app-data` donde persisten los vídeos subidos, las capturas y la base de datos. El dashboard localiza la API mediante la variable `API_URL` (por defecto `http://api:8000` dentro de Compose; `http://localhost:8000` en local).
+
+---
+
 ## Parámetros principales
 
 | Componente       | Parámetro          | Por defecto | Significado                                                      |
@@ -206,7 +228,6 @@ El desarrollo está organizado por sprints (ver historial de commits):
 ### Tareas pendientes
 
 - [ ] Integrar un bot de Telegram para notificaciones.
-- [ ] Empaquetado con Docker.
 - [ ] Ampliar la cobertura de tests (lógica de riesgo del agente con mocks).
 
 ---
@@ -220,6 +241,7 @@ El desarrollo está organizado por sprints (ver historial de commits):
 | API / backend         | FastAPI, Uvicorn, WebSockets                            |
 | Persistencia          | SQLite                                                  |
 | Dashboard             | Streamlit                                               |
+| Despliegue            | Docker, Docker Compose                                  |
 | Notificaciones (prev.)| python-telegram-bot                                     |
 | Utilidades            | python-dotenv, pydantic, pillow, numpy                  |
 | Testing               | pytest, pytest-asyncio                                  |

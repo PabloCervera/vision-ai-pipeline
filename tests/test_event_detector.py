@@ -10,16 +10,20 @@ from detection.event_detector import EventDetector
 class FakeTrack:
     """Track de prueba con la interfaz mínima que usa EventDetector."""
 
-    def __init__(self, track_id, ltrb, confirmed=True):
+    def __init__(self, track_id, ltrb, confirmed=True, det_class="person"):
         self.track_id = track_id
         self._ltrb = ltrb
         self._confirmed = confirmed
+        self._det_class = det_class
 
     def is_confirmed(self):
         return self._confirmed
 
     def to_ltrb(self):
         return self._ltrb
+
+    def get_det_class(self):
+        return self._det_class
 
 
 def test_objeto_estatico_se_detecta():
@@ -34,6 +38,19 @@ def test_objeto_estatico_se_detecta():
     assert len(estaticos) == 1
     assert estaticos[0]["track_id"] == "1"
     assert estaticos[0]["center"] == (5, 5)
+    # Metadatos de grounding: clase del objeto y frames que lleva inmóvil
+    assert estaticos[0]["class_name"] == "person"
+    assert estaticos[0]["static_frames"] == 3  # = static_threshold en el primer disparo
+
+
+def test_static_frames_se_incrementa():
+    detector = EventDetector(static_threshold=3, max_distance=10)
+    quieto = FakeTrack("1", (0, 0, 10, 10))
+
+    detector.update([quieto])
+    detector.update([quieto])
+    assert detector.update([quieto])[0]["static_frames"] == 3  # primer disparo
+    assert detector.update([quieto])[0]["static_frames"] == 4  # un frame más inmóvil
 
 
 def test_objeto_en_movimiento_no_se_detecta():

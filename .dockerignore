@@ -1,0 +1,24 @@
+# Entornos virtuales
+venv/
+.venv/
+
+# Datos generados en ejecución (se montan como volumen)
+data/
+
+# Caché de Python
+**/__pycache__/
+*.py[cod]
+
+# Tests (no se necesitan en la imagen de ejecución)
+tests/
+.pytest_cache/
+
+# Control de versiones y metadatos
+.git/
+.gitignore
+
+# Secretos y artefactos locales (la key se inyecta por env_file)
+.env
+*.db
+*.mp4
+*.pt

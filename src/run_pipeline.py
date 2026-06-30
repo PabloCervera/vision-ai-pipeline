@@ -1,8 +1,10 @@
 import cv2
 import os
+import queue
+import threading
 import time
 from detection.yolo_detector import YOLODetector
-from capture.video_source import VideoSource, VideoSourceError
+from capture.video_source import VideoSource, VideoSourceError, EndOfStream
 from detection.tracker import Tracker
 from detection.event_detector import EventDetector
 from ai.alert_agent import agent
@@ -10,9 +12,45 @@ from config import FRAMES_DIR
 from datetime import datetime
 
 
+def _analysis_worker(job_queue, events, video):
+    """
+    Consume en segundo plano los trabajos de análisis de escena encolados por el pipeline.
+
+    Cada trabajo es una tupla (frame, static_objects). Invoca al agente de IA (llamada lenta
+    al LLM) sin bloquear el bucle de captura y, si el riesgo es medio/alto, guarda la captura
+    y registra el evento. Se detiene al recibir el centinela None.
+    """
+    while True:
+        job = job_queue.get()
+        try:
+            if job is None:
+                break
+            frame, static_objects = job
+            result = agent.invoke({
+                "frame": frame,
+                "static_objects": static_objects,
+                "scene_description": "",
+                "risk_level": "",
+                "risk_reason": "",
+                "risk_confidence": 0.0,
+                "alert_message": ""
+            })
+            if events is not None and result["risk_level"] in ("medium", "high"):
+                for obj in static_objects:
+                    timestamp = datetime.now().isoformat()
+                    filename = f"{obj['track_id']}_{timestamp.replace(':', '-')}.jpg"
+                    frame_path = str(FRAMES_DIR / filename)
+                    cv2.imwrite(frame_path, frame)
+                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"], timestamp=timestamp, frame_path=frame_path, video=video)
+        except Exception as e:
+            print(f"Error en el análisis de la escena: {e}")
+        finally:
+            job_queue.task_done()
+
+
 def run_pipeline(video_source=0, events=None, latest_frame=None, stop_event=None, video=None, progress=None, model_path="yolov8n.pt", confidence=0.5, show_window=False):
     """
-    Función principal para ejecutar la pipeline de visión por computadora.
+    Función principal para ejecutar el pipeline de visión por computador.
     Esta función abre la fuente de video, carga el modelo YOLO y procesa cada frame para detectar objetos.
 
     El bucle termina cuando se activa `stop_event` (p. ej. desde el endpoint /stop) o cuando
@@ -41,60 +79,62 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, stop_event=None
     last_analysis_time = 0
     analysis_interval = 10
 
-    with VideoSource(video_source) as source:
-        total_frames = source.frame_count()
-        processed_frames = 0
-        if progress is not None:
-            progress.update({"processed": 0, "total": total_frames, "percent": 0.0})
+    # El análisis de escena (LLM) corre en un hilo aparte para no bloquear la captura.
+    # maxsize=1: si ya hay un análisis pendiente, se descarta el nuevo (lo limita el intervalo).
+    job_queue = queue.Queue(maxsize=1)
+    worker = threading.Thread(target=_analysis_worker, args=(job_queue, events, video), daemon=True)
+    worker.start()
 
-        while stop_event is None or not stop_event.is_set():
-            try:
-                frame = source.read()
-                processed_frames += 1
-                if progress is not None:
-                    progress["processed"] = processed_frames
-                    progress["percent"] = round(processed_frames / total_frames * 100, 1) if total_frames else 0.0
-                frame = cv2.resize(frame, (1708, 960))
-                detections = detector.detect(frame)
-                tracks = tracker.update(detections, frame)
-                annotated_frame = tracker.annotate(frame, tracks)
-                if latest_frame is not None:
-                    latest_frame[0] = annotated_frame.copy()
+    try:
+        with VideoSource(video_source) as source:
+            total_frames = source.frame_count()
+            processed_frames = 0
+            if progress is not None:
+                progress.update({"processed": 0, "total": total_frames, "percent": 0.0})
 
-                if show_window:
-                    cv2.imshow("Detections", annotated_frame)
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
-                        break
+            while stop_event is None or not stop_event.is_set():
+                try:
+                    frame = source.read()
+                    processed_frames += 1
+                    if progress is not None:
+                        progress["processed"] = processed_frames
+                        progress["percent"] = round(processed_frames / total_frames * 100, 1) if total_frames else 0.0
+                    frame = cv2.resize(frame, (1708, 960))
+                    detections = detector.detect(frame)
+                    tracks = tracker.update(detections, frame)
+                    annotated_frame = tracker.annotate(frame, tracks)
+                    if latest_frame is not None:
+                        latest_frame[0] = annotated_frame.copy()
 
-                static_objects = event_detector.update(tracks)
-                if static_objects:
-                    now = time.time()
-                    if now - last_analysis_time > analysis_interval:
-                        result = agent.invoke({
-                            "frame": frame,
-                            "static_objects": static_objects,
-                            "scene_description": "",
-                            "risk_level": "",
-                            "alert_message": ""
-                        })
+                    if show_window:
+                        cv2.imshow("Detections", annotated_frame)
+                        if cv2.waitKey(1) & 0xFF == ord('q'):
+                            break
 
-                        if events is not None:
-                            if result["risk_level"] in ("medium", "high"):
-                                for obj in static_objects:
-                                    timestamp = datetime.now().isoformat()
-                                    filename = f"{obj['track_id']}_{timestamp.replace(':', '-')}.jpg"
-                                    frame_path = str(FRAMES_DIR / filename)
-                                    cv2.imwrite(frame_path, frame)
-                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"], timestamp=timestamp, frame_path=frame_path, video=video)
-                        last_analysis_time = now
-                    
-            except VideoSourceError as e:
-                print(f"Error al procesar el frame: {e}")
-                if progress is not None and total_frames:
-                    progress.update({"processed": total_frames, "percent": 100.0})
-                break
-        if show_window:
-            cv2.destroyAllWindows()
+                    static_objects = event_detector.update(tracks)
+                    if static_objects:
+                        now = time.time()
+                        if now - last_analysis_time > analysis_interval:
+                            try:
+                                job_queue.put_nowait((frame.copy(), static_objects))
+                                last_analysis_time = now
+                            except queue.Full:
+                                pass  # ya hay un análisis en curso; se omite este
+
+                except EndOfStream:
+                    # Fin normal del vídeo: no es un error.
+                    print(f"Procesamiento finalizado: {video}")
+                    if progress is not None and total_frames:
+                        progress.update({"processed": total_frames, "percent": 100.0})
+                    break
+                except VideoSourceError as e:
+                    print(f"Error al procesar el frame: {e}")
+                    break
+            if show_window:
+                cv2.destroyAllWindows()
+    finally:
+        job_queue.put(None)   # centinela: detiene el worker tras vaciar lo pendiente
+        worker.join()
 
 if __name__ == "__main__":
     run_pipeline(video_source=0, confidence=0.3, show_window=True)
