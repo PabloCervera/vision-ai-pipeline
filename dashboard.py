@@ -1,7 +1,15 @@
+"""
+Interfaz de usuario en Streamlit para controlar el pipeline de visión y explorar sus resultados.
+Se comunica con la API (por defecto en http://localhost:8000) y organiza la aplicación en tres
+fases: subir un vídeo (idle), procesarlo (processing) y revisar los eventos con un chat de
+preguntas sobre la escena (finished).
+"""
+
 import streamlit as st
 import requests
 
 def dashboard():
+    """Renderiza la aplicación y enruta entre las fases idle / processing / finished."""
     st.title("Dashboard de Eventos")
 
     if "phase" not in st.session_state:
@@ -32,6 +40,7 @@ def dashboard():
             st.rerun()  
 
 def upload_file():
+    """Permite subir un vídeo, lo envía a la API e inicia el procesamiento."""
     uploaded_file = st.file_uploader("Sube un video", type=["mp4", "avi", "mov"])
     if uploaded_file is not None:
         if st.button("Iniciar"):
@@ -48,6 +57,7 @@ def upload_file():
 
 @st.fragment(run_every=1)
 def check_status():
+    """Sondea periódicamente el estado de la API y pasa a la fase final cuando el pipeline se detiene."""
     response = requests.get("http://localhost:8000/status")
     if response.status_code == 200:
         status = response.json()
@@ -56,6 +66,7 @@ def check_status():
             st.rerun()
 
 def chat_qa():
+    """Muestra el chat y envía cada pregunta del usuario al endpoint `/ask` de la API."""
     if "messages" not in st.session_state:
         st.session_state.messages = []
     for message in st.session_state.messages:
@@ -74,6 +85,7 @@ def chat_qa():
                 st.write(answer)
 
 def show_results():
+    """Recupera los eventos de la API y los muestra con su nivel de riesgo, alerta y captura."""
     response = requests.get("http://localhost:8000/events")
     if response.status_code == 200:
         events = response.json()["events"]
@@ -87,12 +99,14 @@ def show_results():
         
 @st.fragment(run_every=0.1)
 def update_frame():
+    """Refresca de forma continua el último frame anotado obtenido de la API."""
     response = requests.get("http://localhost:8000/latest_frame")
     if response.status_code == 200:
         st.image(response.content, channels="BGR")
         
 @st.fragment(run_every=1)
 def update_events():
+    """Refresca periódicamente la lista de eventos obtenida de la API."""
     response = requests.get("http://localhost:8000/events")
     if response.status_code == 200:
         events = response.json()

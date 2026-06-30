@@ -15,6 +15,9 @@ class Tracker:
     """
     
     def __init__(self, max_age=30):
+        """
+        Inicializa el tracker con la edad máxima de los objetos trackeados.
+        """
         self.tracker = DeepSort(max_age=max_age)
     
     def update(self, detections, frame):

@@ -1,66 +1,75 @@
 # Vision AI Pipeline
 
-Pipeline de **visión por computador** que detecta y sigue objetos en tiempo real sobre un flujo de vídeo (webcam, fichero o RTSP) y, cuando identifica situaciones potencialmente relevantes (objetos que quedan estáticos), delega en un **agente de IA generativa** que describe la escena, evalúa el nivel de riesgo y emite una alerta.
+Pipeline de **visión por computador** que detecta y sigue objetos en tiempo real sobre un flujo de vídeo (webcam, fichero o RTSP) y, cuando identifica situaciones potencialmente relevantes (objetos que quedan estáticos), delega en un **agente de IA generativa** que describe la escena, evalúa el nivel de riesgo y emite una alerta. Los eventos se persisten en una base de datos y se exploran desde un **dashboard web** que incluye un **chat para hacer preguntas** sobre lo ocurrido.
 
 Combina:
 
 - **YOLOv8** ([ultralytics](https://github.com/ultralytics/ultralytics)) para detección de objetos.
 - **DeepSORT** ([deep-sort-realtime](https://github.com/levan92/deep_sort_realtime)) para seguimiento multi-objeto con IDs persistentes.
-- **LangChain + LangGraph** orquestando un agente con un modelo de visión de **Groq** (`llama-4-scout`) para analizar la escena y razonar sobre el riesgo.
-- **FastAPI** para exponer los eventos vía API REST + WebSocket.
+- **LangChain + LangGraph** orquestando un agente con el modelo de visión `llama-4-scout` de **Groq** para analizar la escena y razonar sobre el riesgo.
+- **FastAPI** para controlar el pipeline y exponer eventos vía API REST + WebSocket.
+- **SQLite** para almacenar el historial de eventos.
+- **Streamlit** como interfaz: subir vídeo, ver alertas con su captura y preguntar sobre la escena.
 
-> ⚠️ El proyecto está en desarrollo activo (organizado por sprints). Algunos módulos descritos en el roadmap todavía no están implementados — ver [Estado del proyecto](#estado-del-proyecto).
+> ⚠️ El proyecto está en desarrollo activo (organizado por sprints). Ver [Estado del proyecto](#estado-del-proyecto).
 
 ---
 
 ## Arquitectura
 
 ```
-┌──────────────┐   frames   ┌───────────────┐  detecciones  ┌──────────┐  tracks  ┌────────────────┐
-│ VideoSource  │──────────▶ │ YOLODetector  │─────────────▶ │ Tracker  │────────▶ │ EventDetector  │
-│ (cam/file/   │            │ (YOLOv8)      │               │(DeepSORT)│          │ (objetos       │
-│  RTSP)       │            └───────────────┘               └──────────┘          │  estáticos)    │
-└──────────────┘                                                                  └───────┬────────┘
-                                                                                          │ static_objects
-                                                                                          ▼
-                                                          ┌─────────────────────────────────────────┐
-                                                          │  Agente de alerta (LangGraph)             │
-                                                          │                                           │
-                                                          │  analyze_scene → decide_risk → ┬─ high/med │
-                                                          │   (SceneAnalyzer/Groq Vision)  │  └─ low ──┐│
-                                                          │                                send_alert  ││
-                                                          │                                  ignore ◀──┘│
-                                                          └─────────────────┬─────────────────────────┘
-                                                                            │ alert_message
-                                                                            ▼
-                                                                 ┌────────────────────┐
-                                                                 │  FastAPI (api.py)   │
-                                                                 │  /events /status    │
-                                                                 │  /stream (WebSocket)│
-                                                                 └────────────────────┘
+┌──────────────┐  frames  ┌──────────────┐ detecciones ┌──────────┐ tracks ┌────────────────┐
+│ VideoSource  │────────▶ │ YOLODetector │───────────▶ │ Tracker  │──────▶ │ EventDetector  │
+│ (cam/file/   │          │ (YOLOv8)     │             │(DeepSORT)│        │ (objetos       │
+│  RTSP)       │          └──────────────┘             └──────────┘        │  estáticos)    │
+└──────────────┘                                                           └───────┬────────┘
+                                                                                   │ static_objects
+                                                                                   ▼
+                                                   ┌─────────────────────────────────────────┐
+                                                   │  Agente de alerta (LangGraph)             │
+                                                   │  analyze_scene → decide_risk → ┬─ alta/med│
+                                                   │   (SceneAnalyzer/Groq Vision)  └─ baja ─┐ │
+                                                   │                          send_alert / ignore
+                                                   └─────────────────┬─────────────────────────┘
+                                                                     │ alert + frame (si riesgo medio/alto)
+                                                                     ▼
+                                       ┌──────────────────┐    ┌─────────────────────┐
+                                       │  EventStore      │◀──▶│  FastAPI (api.py)   │
+                                       │  (SQLite)        │    │  REST + WebSocket   │
+                                       └──────────────────┘    └──────────┬──────────┘
+                                                  ▲                       │
+                                          ┌───────┴────────┐              ▼
+                                          │  QAChain (Groq)│     ┌────────────────────┐
+                                          │  chat sobre    │     │ Dashboard           │
+                                          │  los eventos   │     │ (Streamlit)         │
+                                          └────────────────┘     └────────────────────┘
 ```
 
 ### Flujo del pipeline ([src/run_pipeline.py](src/run_pipeline.py))
 
 1. Se abre la fuente de vídeo y se lee frame a frame.
 2. Cada frame se redimensiona y pasa por **YOLODetector** → lista de `Detection`.
-3. **Tracker** (DeepSORT) asigna un ID estable a cada objeto entre frames.
+3. **Tracker** (DeepSORT) asigna un ID estable a cada objeto entre frames y anota el frame.
 4. **EventDetector** mantiene el historial de posiciones de cada track y detecta los que llevan estáticos un nº de frames (posible objeto abandonado, persona inmóvil, etc.).
 5. Si hay objetos estáticos —y respetando un intervalo mínimo entre análisis (`analysis_interval = 10s`)— se invoca el **agente de IA**.
-6. El agente describe la escena, decide el riesgo y genera (o no) un `alert_message`.
+6. El agente describe la escena, decide el riesgo y, si es **medio o alto**, guarda la captura en disco y registra el evento en la base de datos.
 
 ### El agente de alerta ([src/alert_agent.py](src/alert_agent.py))
 
 Implementado como un grafo de estados con **LangGraph**:
 
-| Nodo            | Función                                                                            |
-| --------------- | --------------------------------------------------------------------------------- |
-| `analyze_scene` | Envía el frame al modelo de visión Groq y obtiene una descripción textual.        |
-| `decide_risk`   | Pide al LLM que clasifique el riesgo en `low` / `medium` / `high`.                 |
-| `send_alert`    | (riesgo medio/alto) Compone el mensaje de alerta.                                  |
-| `ignore`        | (riesgo bajo) No hace nada.                                                        |
+| Nodo            | Función                                                                     |
+| --------------- | --------------------------------------------------------------------------- |
+| `analyze_scene` | Envía el frame al modelo de visión de Groq y obtiene una descripción textual. |
+| `decide_risk`   | Pide al LLM que clasifique el riesgo en `low` / `medium` / `high`.          |
+| `send_alert`    | (riesgo medio/alto) Compone el mensaje de alerta.                           |
+| `ignore`        | (riesgo bajo) No hace nada.                                                 |
 
 El enrutado entre `send_alert` e `ignore` se decide mediante una **arista condicional** según el `risk_level`.
+
+### Consulta sobre los eventos ([src/qa_chain.py](src/qa_chain.py))
+
+`QAChain` recibe la pregunta del usuario junto con los eventos recientes de la base de datos y pide al LLM una respuesta basada **únicamente** en ese historial. Es lo que alimenta el chat del dashboard.
 
 ---
 
@@ -76,11 +85,15 @@ vision-ai-pipeline/
 │   │   ├── yolo_detector.py     # Wrapper de YOLOv8
 │   │   ├── tracker.py           # Tracking con DeepSORT + anotación
 │   │   └── event_detector.py    # Detección de objetos estáticos
+│   ├── database/
+│   │   └── event_store.py       # Persistencia de eventos en SQLite
 │   ├── scene_analyzer.py        # Descripción de escena (Groq Vision)
 │   ├── alert_agent.py           # Agente LangGraph de análisis de riesgo
-│   ├── run_pipeline.py          # Punto de entrada del pipeline
+│   ├── qa_chain.py              # Chat Q&A sobre los eventos detectados
+│   ├── run_pipeline.py          # Bucle principal del pipeline
 │   ├── api.py                   # API FastAPI + WebSocket
 │   └── utils.py                 # Paleta de colores para anotaciones
+├── dashboard.py                 # Interfaz Streamlit
 ├── requirements.txt
 └── README.md
 ```
@@ -90,7 +103,7 @@ vision-ai-pipeline/
 ## Requisitos
 
 - **Python 3.10+**
-- Una **API key de Groq** (para `scene_analyzer` y `alert_agent`).
+- Una **API key de Groq** (para `scene_analyzer`, `alert_agent` y `qa_chain`).
 - Pesos de YOLOv8 (`yolov8n.pt`) — `ultralytics` los descarga automáticamente la primera vez.
 
 ## Instalación
@@ -117,59 +130,54 @@ Crea un fichero `.env` en la raíz del proyecto con tu clave de Groq:
 GROQ_API_KEY=tu_api_key_aqui
 ```
 
-`load_dotenv()` la carga automáticamente en `scene_analyzer.py` y `alert_agent.py`.
+`load_dotenv()` la carga automáticamente en los módulos que usan Groq.
 
 ---
 
 ## Uso
 
-### Ejecutar el pipeline directamente
+La forma recomendada de usar el proyecto es levantar la API y el dashboard, que se comunican entre sí.
 
-```bash
-cd src
-python run_pipeline.py
-```
-
-Por defecto procesa `test.mp4`. Se abre una ventana de OpenCV con las detecciones anotadas; pulsa **`q`** para salir. Las alertas generadas se imprimen por consola.
-
-Para usar la webcam o ajustar parámetros, edita la llamada en `run_pipeline.py` o invócala desde tu propio script:
-
-```python
-from run_pipeline import run_pipeline
-
-run_pipeline(
-    video_source=0,            # 0 = webcam, ruta a fichero, o URL RTSP
-    model_path="yolov8n.pt",   # cualquier modelo YOLOv8
-    confidence=0.3,            # umbral de confianza
-)
-```
-
-### Ejecutar la API
+### 1. Arrancar la API
 
 ```bash
 cd src
 uvicorn api:app --reload
 ```
 
-| Endpoint        | Método    | Descripción                                            |
-| --------------- | --------- | ------------------------------------------------------ |
-| `/events`       | GET       | Lista de alertas acumuladas.                           |
-| `/status`       | GET       | Estado del pipeline y nº total de eventos.             |
-| `/stream`       | WebSocket | Canal de streaming (esqueleto, en desarrollo).         |
+### 2. Arrancar el dashboard (en otra terminal)
 
-El pipeline arranca en un hilo en segundo plano al iniciar la aplicación (`@app.on_event("startup")`).
+```bash
+streamlit run dashboard.py
+```
+
+Desde el dashboard puedes **subir un vídeo**, **iniciar y detener** el procesamiento o esperar a que termine, ver en tiempo real las **alertas detectadas con su captura** y, al terminar, **hacer preguntas en lenguaje natural** sobre lo ocurrido en la escena. El dashboard asume que la API corre en `http://localhost:8000`.
+
+### Endpoints de la API
+
+| Endpoint         | Método    | Descripción                                                       |
+| ---------------- | --------- | ----------------------------------------------------------------- |
+| `/upload_video`  | POST      | Sube un vídeo al servidor y devuelve su ruta.                     |
+| `/start`         | POST      | Inicia el pipeline (en un hilo) sobre la ruta indicada.          |
+| `/stop`          | POST      | Detiene el pipeline en ejecución.                                |
+| `/status`        | GET       | Estado del pipeline (`running`/`stopped`) y nº total de eventos. |
+| `/events`        | GET       | Lista de eventos almacenados.                                    |
+| `/clear_events`  | POST      | Vacía el historial de eventos.                                   |
+| `/ask`           | POST      | Pregunta sobre los eventos; responde vía `QAChain`.              |
+| `/latest_frame`  | GET       | Último frame anotado (JPEG).                                     |
+| `/stream`        | WebSocket | Streaming de frames anotados en tiempo real.                     |
 
 ---
 
 ## Parámetros principales
 
-| Componente       | Parámetro          | Por defecto | Significado                                                  |
-| ---------------- | ------------------ | ----------- | ----------------------------------------------------------- |
-| `YOLODetector`   | `confidence`       | `0.5`       | Umbral mínimo de confianza para una detección.              |
-| `Tracker`        | `max_age`          | `30`        | Frames que un track sobrevive sin detecciones.              |
-| `EventDetector`  | `static_threshold` | `30`        | Nº de frames de historial para evaluar si un objeto está quieto. |
-| `EventDetector`  | `max_distance`     | `10`        | Distancia (px) por debajo de la cual se considera estático. |
-| `run_pipeline`   | `analysis_interval`| `10` (s)    | Tiempo mínimo entre invocaciones al agente de IA.           |
+| Componente       | Parámetro          | Por defecto | Significado                                                      |
+| ---------------- | ------------------ | ----------- | --------------------------------------------------------------- |
+| `YOLODetector`   | `confidence`       | `0.5`       | Umbral mínimo de confianza para una detección.                  |
+| `Tracker`        | `max_age`          | `30`        | Frames que un track sobrevive sin detecciones.                  |
+| `EventDetector`  | `static_threshold` | `30`        | Nº de frames de historial para evaluar si un objeto está quieto.|
+| `EventDetector`  | `max_distance`     | `10`        | Distancia (px) por debajo de la cual se considera estático.     |
+| `run_pipeline`   | `analysis_interval`| `10` (s)    | Tiempo mínimo entre invocaciones al agente de IA.               |
 
 ---
 
@@ -177,19 +185,15 @@ El pipeline arranca en un hilo en segundo plano al iniciar la aplicación (`@app
 
 El desarrollo está organizado por sprints (ver historial de commits):
 
-- ✅ **Sprint 1–2** — Captura de vídeo, detección YOLOv8, tracking DeepSORT y detección de eventos (objetos estáticos).
+- ✅ **Sprint 1–2** — Captura de vídeo, detección YOLOv8, tracking DeepSORT, detección de objetos estáticos y persistencia de eventos en SQLite.
 - ✅ **Sprint 3** — Descripción de escena con Groq Vision y agente de riesgo con LangGraph.
-- 🚧 **Sprint 4** — API FastAPI (en curso) y dashboard con Streamlit.
+- ✅ **Sprint 4** — API FastAPI (control del pipeline, WebSocket de streaming), dashboard de Streamlit y chat de Q&A sobre los eventos.
 
 ### Tareas pendientes
 
-- [ ] Almacenar los eventos y avisos en base de datos (SQLite previsto).
-- [ ] Integrar bot de Telegram para notificaciones.
-- [ ] Completar el canal WebSocket `/stream` (actualmente emite un mensaje placeholder).
-- [ ] Dashboard de Streamlit.
+- [ ] Integrar un bot de Telegram para notificaciones.
+- [ ] Empaquetado con Docker.
 - [ ] Tests automatizados (`pytest` ya está en dependencias).
-
-> Algunos módulos que aparecen en `folder_structure.txt` (`storage/event_store.py`, `notifier/telegram_bot.py`, `dashboard/app.py`, `Dockerfile`, etc.) corresponden al diseño objetivo y **aún no están implementados**.
 
 ---
 
@@ -200,7 +204,8 @@ El desarrollo está organizado por sprints (ver historial de commits):
 | Visión por computador | OpenCV, YOLOv8 (ultralytics), DeepSORT                  |
 | IA generativa         | LangChain, LangGraph, Groq (`llama-4-scout-17b`)        |
 | API / backend         | FastAPI, Uvicorn, WebSockets                            |
-| Dashboard (previsto)  | Streamlit                                               |
+| Persistencia          | SQLite                                                  |
+| Dashboard             | Streamlit                                               |
 | Notificaciones (prev.)| python-telegram-bot                                     |
-| Utilidades            | python-dotenv, pydantic, pillow, numpy                 |
+| Utilidades            | python-dotenv, pydantic, pillow, numpy                  |
 | Testing               | pytest, pytest-asyncio                                  |

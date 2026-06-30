@@ -15,6 +15,9 @@ class YOLODetector:
     """
     
     def __init__(self, model_path="yolov8n.pt", confidence=0.5):
+        """
+        Inicializa el detector YOLO con la ruta del modelo y el umbral de confianza.
+        """
         self.confidence = confidence
         self._model = YOLO(model_path)
         

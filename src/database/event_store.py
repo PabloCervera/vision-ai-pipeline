@@ -7,9 +7,21 @@ el ID del objeto rastreado, el mensaje de alerta y el nivel de riesgo asociado.
 
 import sqlite3
 
+from config import DB_PATH
+
 
 class EventStore:
-    def __init__(self, db_path="events.db"):
+    """
+    Clase para manejar el almacenamiento de eventos en una base de datos SQLite.
+    Esta clase proporciona métodos para almacenar y recuperar eventos de una base de datos SQLite.
+    Cada evento contiene información sobre el momento en que ocurrió,
+    el ID del objeto rastreado, el mensaje de alerta y el nivel de riesgo asociado.
+    """
+
+    def __init__(self, db_path=DB_PATH):
+        """
+        Inicializa la conexión a la base de datos SQLite y crea la tabla de eventos si no existe.
+        """
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._create_table()

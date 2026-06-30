@@ -17,10 +17,16 @@ class SceneAnalyzer:
     """
     
     def __init__(self):
+        """
+        Inicializa el analizador de escenas y carga las variables de entorno necesarias.
+        """
         load_dotenv()
         self.analyzer = ChatGroq(model="meta-llama/llama-4-scout-17b-16e-instruct")
         
     def analyze(self, frame, context=""):
+        """
+        Analiza un frame de video y genera una descripción textual de la escena.
+        """
         _, buffer = cv2.imencode(".jpg", frame)
         image_b64 = base64.b64encode(buffer).decode("utf-8")
         message = HumanMessage(content=[

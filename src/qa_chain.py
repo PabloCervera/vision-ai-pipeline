@@ -1,9 +1,17 @@
-
+"""
+Este módulo contiene la clase QAChain, que se encarga de responder preguntas basadas en eventos detectados por un sistema de vigilancia inteligente.
+Utiliza un modelo de lenguaje para procesar la pregunta del usuario y generar una respuesta basada en
+los eventos proporcionados.
+"""
 
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 
 class QAChain:
+    """
+    Clase para manejar la lógica de preguntas y respuestas basadas en eventos detectados.
+    Esta clase utiliza un modelo de lenguaje para procesar la pregunta del usuario y generar una respuesta basada en los eventos proporcionados.
+    """
     def __init__(self):
         self.qaChain = ChatGroq(model="meta-llama/llama-4-scout-17b-16e-instruct")
 

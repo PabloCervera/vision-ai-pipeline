@@ -11,6 +11,9 @@ class EventDetector:
     Esta clase mantiene un historial de posiciones para cada objeto trackeado y analiza este historial
     """
     def __init__(self, static_threshold=30, max_distance=10):
+        """
+        Inicializa el detector de eventos con los parámetros necesarios.
+        """
         self.positions = {}
         self.static_threshold = static_threshold
         self.max_distance = max_distance

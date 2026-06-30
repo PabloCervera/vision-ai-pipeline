@@ -16,6 +16,9 @@ class VideoSource:
     Esta clase encapsula la lógica de abrir y cerrar la fuente de video, y proporciona una interfaz sencilla para acceder a los frames.
     """
     def __init__(self, source=0):
+        """
+        Inicializa la fuente de video.
+        """
         self.source = source
         self._cap = None  # aún no abrimos nada
 

@@ -1,11 +1,11 @@
 import cv2
 import time
-import os
 from detection.yolo_detector import YOLODetector
 from capture.video_source import VideoSource, VideoSourceError
 from detection.tracker import Tracker
 from detection.event_detector import EventDetector
 from alert_agent import agent
+from config import FRAMES_DIR
 from datetime import datetime
 
 
@@ -24,11 +24,8 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, stop_event=None
     event_detector = EventDetector(static_threshold=30)
     
     last_analysis_time = 0
-    analysis_interval = 10 
-    folder_path = "../data/event_frames/"
-    
-    os.makedirs(folder_path, exist_ok=True)
-        
+    analysis_interval = 10
+
     with VideoSource(video_source) as source:
         while stop_event is None or not stop_event.is_set():
             try:
@@ -61,8 +58,9 @@ def run_pipeline(video_source=0, events=None, latest_frame=None, stop_event=None
                                 for obj in static_objects:
                                     timestamp = datetime.now().isoformat()
                                     filename = f"{obj['track_id']}_{timestamp.replace(':', '-')}.jpg"
-                                    cv2.imwrite(folder_path + filename, frame)
-                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"], timestamp=timestamp, frame_path=folder_path + filename)
+                                    frame_path = str(FRAMES_DIR / filename)
+                                    cv2.imwrite(frame_path, frame)
+                                    events.add_event(track_id=obj["track_id"], alert=result["alert_message"], risk_level=result["risk_level"], timestamp=timestamp, frame_path=frame_path)
                         last_analysis_time = now
                     
             except VideoSourceError as e:

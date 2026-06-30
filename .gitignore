@@ -225,3 +225,6 @@ __marimo__/
 
 # Database files
 *.db
+
+# Datos generados en ejecución (vídeos subidos, capturas de eventos, BD)
+/data/
