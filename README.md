@@ -54,7 +54,7 @@ Combina:
 5. Si hay objetos estáticos —y respetando un intervalo mínimo entre análisis (`analysis_interval = 10s`)— se invoca el **agente de IA**.
 6. El agente describe la escena, decide el riesgo y, si es **medio o alto**, guarda la captura en disco y registra el evento en la base de datos.
 
-### El agente de alerta ([src/alert_agent.py](src/alert_agent.py))
+### El agente de alerta ([src/ai/alert_agent.py](src/ai/alert_agent.py))
 
 Implementado como un grafo de estados con **LangGraph**:
 
@@ -67,7 +67,7 @@ Implementado como un grafo de estados con **LangGraph**:
 
 El enrutado entre `send_alert` e `ignore` se decide mediante una **arista condicional** según el `risk_level`.
 
-### Consulta sobre los eventos ([src/qa_chain.py](src/qa_chain.py))
+### Consulta sobre los eventos ([src/ai/qa_chain.py](src/ai/qa_chain.py))
 
 `QAChain` recibe la pregunta del usuario junto con los eventos recientes de la base de datos y pide al LLM una respuesta basada **únicamente** en ese historial. Es lo que alimenta el chat del dashboard.
 
@@ -87,13 +87,16 @@ vision-ai-pipeline/
 │   │   └── event_detector.py    # Detección de objetos estáticos
 │   ├── database/
 │   │   └── event_store.py       # Persistencia de eventos en SQLite
-│   ├── scene_analyzer.py        # Descripción de escena (Groq Vision)
-│   ├── alert_agent.py           # Agente LangGraph de análisis de riesgo
-│   ├── qa_chain.py              # Chat Q&A sobre los eventos detectados
+│   ├── ai/
+│   │   ├── scene_analyzer.py    # Descripción de escena (Groq Vision)
+│   │   ├── alert_agent.py       # Agente LangGraph de análisis de riesgo
+│   │   └── qa_chain.py          # Chat Q&A sobre los eventos detectados
+│   ├── config.py                # Rutas centralizadas (data/, BD, capturas)
 │   ├── run_pipeline.py          # Bucle principal del pipeline
 │   ├── api.py                   # API FastAPI + WebSocket
 │   └── utils.py                 # Paleta de colores para anotaciones
 ├── dashboard.py                 # Interfaz Streamlit
+├── data/                        # Datos generados en ejecución (no versionado)
 ├── requirements.txt
 └── README.md
 ```

@@ -31,13 +31,14 @@ def dashboard():
     elif st.session_state.phase == "finished":
         st.subheader("Eventos detectados")
         show_results()
-        st.subheader("Pregunta sobre la escena")
-        chat_qa()
 
         if st.button("Volver"):
             requests.post("http://localhost:8000/clear_events")
             st.session_state.phase = "idle"
             st.rerun()  
+
+        st.subheader("Pregunta sobre la escena")
+        chat_qa()
 
 def upload_file():
     """Permite subir un vídeo, lo envía a la API e inicia el procesamiento."""

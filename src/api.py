@@ -12,7 +12,7 @@ import shutil
 from config import UPLOADS_DIR
 from run_pipeline import run_pipeline
 from database.event_store import EventStore
-from qa_chain import QAChain
+from ai.qa_chain import QAChain
 from fastapi import FastAPI, WebSocket, UploadFile, File
 from fastapi.responses import Response
 from contextlib import asynccontextmanager

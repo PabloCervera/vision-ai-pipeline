@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 from langgraph.graph import StateGraph, END
-from scene_analyzer import SceneAnalyzer
+from ai.scene_analyzer import SceneAnalyzer
 
 class AgentState(TypedDict):
     frame: object

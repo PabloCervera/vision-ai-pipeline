@@ -4,7 +4,7 @@ from detection.yolo_detector import YOLODetector
 from capture.video_source import VideoSource, VideoSourceError
 from detection.tracker import Tracker
 from detection.event_detector import EventDetector
-from alert_agent import agent
+from ai.alert_agent import agent
 from config import FRAMES_DIR
 from datetime import datetime
 
