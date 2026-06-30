@@ -21,8 +21,8 @@ def dashboard():
 
     elif st.session_state.phase == "processing":
         st.subheader("Procesando vídeo...")
-        with st.spinner("Analizando..."):
-            check_status()
+        show_progress()
+        check_status()
         if st.button("Detener"):
             requests.post("http://localhost:8000/stop")
             st.session_state.phase = "finished"
@@ -55,6 +55,17 @@ def upload_file():
                 st.rerun()
             else:
                 st.error("Error al subir el video.")       
+
+@st.fragment(run_every=1)
+def show_progress():
+    """Muestra el avance del procesamiento del vídeo actual; indeterminado si es un flujo en directo."""
+    response = requests.get("http://localhost:8000/progress")
+    if response.status_code == 200:
+        data = response.json()
+        if data["total"]:
+            st.progress(data["percent"] / 100, text=f"{data['percent']:.0f}% ({data['processed']}/{data['total']} frames)")
+        else:
+            st.write("Procesando flujo en directo...")
 
 @st.fragment(run_every=1)
 def check_status():

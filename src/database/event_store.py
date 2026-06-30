@@ -27,39 +27,53 @@ class EventStore:
         self._create_table()
 
     def _create_table(self):
-        """Crea la tabla de eventos si no existe."""
-        
+        """Crea la tabla de eventos si no existe y garantiza la columna `video`."""
+
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 timestamp TEXT NOT NULL,
                 track_id TEXT NOT NULL,
                 alert TEXT NOT NULL,
-                risk_level TEXT NOT NULL, 
-                frame_path TEXT NOT NULL
+                risk_level TEXT NOT NULL,
+                frame_path TEXT NOT NULL,
+                video TEXT
             )
         """)
+        # Migración para bases de datos creadas antes de añadir la columna `video`.
+        columns = [row["name"] for row in self._conn.execute("PRAGMA table_info(events)")]
+        if "video" not in columns:
+            self._conn.execute("ALTER TABLE events ADD COLUMN video TEXT")
         self._conn.commit()
-        
-    def add_event(self, track_id, alert, risk_level, timestamp, frame_path):
-        """Añade un nuevo evento a la base de datos."""
+
+    def add_event(self, track_id, alert, risk_level, timestamp, frame_path, video=None):
+        """Añade un nuevo evento a la base de datos, asociado al vídeo indicado."""
         self._conn.execute("""
-            INSERT INTO events (timestamp, track_id, alert, risk_level, frame_path)
-            VALUES (?, ?, ?, ?, ?)
-        """, (timestamp, track_id, alert, risk_level, frame_path))
+            INSERT INTO events (timestamp, track_id, alert, risk_level, frame_path, video)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (timestamp, track_id, alert, risk_level, frame_path, video))
         self._conn.commit()
-        
-    def get_all_events(self):
-        """Recupera todos los eventos de la base de datos."""
-        cursor = self._conn.execute("SELECT * FROM events ORDER BY id DESC")
+
+    def get_all_events(self, video=None):
+        """Recupera los eventos de la base de datos; si se indica `video`, solo los de ese vídeo."""
+        if video is None:
+            cursor = self._conn.execute("SELECT * FROM events ORDER BY id DESC")
+        else:
+            cursor = self._conn.execute("SELECT * FROM events WHERE video = ? ORDER BY id DESC", (video,))
         return [dict(row) for row in cursor.fetchall()]
-    
-    def clear_events(self):
-        """Elimina todos los eventos de la base de datos."""
-        self._conn.execute("DELETE FROM events")
+
+    def clear_events(self, video=None):
+        """Elimina los eventos; si se indica `video`, solo los de ese vídeo."""
+        if video is None:
+            self._conn.execute("DELETE FROM events")
+        else:
+            self._conn.execute("DELETE FROM events WHERE video = ?", (video,))
         self._conn.commit()
-        
-    def get_recent_events(self, limit=20):
-        """Recupera los eventos más recientes, limitados en cantidad."""
-        cursor = self._conn.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+
+    def get_recent_events(self, limit=20, video=None):
+        """Recupera los eventos más recientes; si se indica `video`, solo los de ese vídeo."""
+        if video is None:
+            cursor = self._conn.execute("SELECT * FROM events ORDER BY id DESC LIMIT ?", (limit,))
+        else:
+            cursor = self._conn.execute("SELECT * FROM events WHERE video = ? ORDER BY id DESC LIMIT ?", (video, limit))
         return [dict(row) for row in cursor.fetchall()]

@@ -6,6 +6,7 @@ WebSocket) y hacer preguntas en lenguaje natural sobre los eventos detectados.
 """
 
 import asyncio
+import os
 import threading
 import cv2
 import shutil
@@ -28,6 +29,8 @@ class VideoPath(BaseModel):
 event_store = EventStore()
 qa_chain = QAChain()
 latest_frame = [None]
+current_video = [None]   # nombre del vídeo en proceso/recién procesado
+progress = {"processed": 0, "total": 0, "percent": 0.0}   # avance del procesamiento
 
 stop_event = threading.Event()
 pipeline_thread = None
@@ -41,29 +44,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app = FastAPI()
-
-def iniciar_pipeline(video_source):
+def iniciar_pipeline(video_source, video=None):
     """
     Lanza el pipeline en un hilo en segundo plano (daemon) sobre la fuente indicada.
     Resetea el evento de parada por si venía de una ejecución anterior.
 
     Args:
         video_source: Fuente de vídeo (ruta de archivo, índice de cámara o URL RTSP).
+        video: Identificador del vídeo al que asociar los eventos detectados.
     """
     global pipeline_thread, stop_event
     stop_event.clear()  # resetea el evento por si venía de una parada anterior
     pipeline_thread = threading.Thread(
         target=run_pipeline,
-        kwargs={"video_source": video_source, "events": event_store, "latest_frame": latest_frame, "stop_event": stop_event}
+        kwargs={"video_source": video_source, "events": event_store, "latest_frame": latest_frame, "stop_event": stop_event, "video": video, "progress": progress}
     )
     pipeline_thread.daemon = True
     pipeline_thread.start()
 
 @app.get("/events")
 def get_events():
-    """Devuelve todos los eventos almacenados en la base de datos."""
-    return {"events": event_store.get_all_events()}
+    """Devuelve los eventos del vídeo actual (todos si aún no hay ninguno en proceso)."""
+    return {"events": event_store.get_all_events(video=current_video[0])}
 
 @app.get("/status")
 def get_status():
@@ -73,6 +75,11 @@ def get_status():
         "status": "running" if is_running else "stopped",
         "total_events": len(event_store.get_all_events())
     }
+
+@app.get("/progress")
+def get_progress():
+    """Devuelve el avance del procesamiento del vídeo actual (frames procesados, total y porcentaje)."""
+    return progress
 
 @app.get("/latest_frame")
 def get_latest_frame():
@@ -97,8 +104,8 @@ async def stream_events(websocket: WebSocket):
 
 @app.post("/ask")
 def ask_question(question: Question):
-    """Responde a una pregunta en lenguaje natural basándose en los eventos más recientes."""
-    events = event_store.get_recent_events(limit=20)
+    """Responde a una pregunta en lenguaje natural basándose en los eventos recientes del vídeo actual."""
+    events = event_store.get_recent_events(limit=20, video=current_video[0])
     answer = qa_chain.ask(question.text, events)
     return {"answer": answer}
 
@@ -112,8 +119,10 @@ async def upload_video(file: UploadFile = File(...)):
 
 @app.post("/start")
 def start_pipeline(video: VideoPath):
-    """Inicia el procesamiento del vídeo indicado por su ruta."""
-    iniciar_pipeline(video_source=video.path)
+    """Inicia el procesamiento del vídeo indicado por su ruta y lo fija como vídeo actual."""
+    current_video[0] = os.path.basename(video.path)
+    progress.update({"processed": 0, "total": 0, "percent": 0.0})
+    iniciar_pipeline(video_source=video.path, video=current_video[0])
     return {"status": "started"}
 
 @app.post("/stop")
@@ -124,6 +133,7 @@ def stop_pipeline():
 
 @app.post("/clear_events")
 def clear_events():
-    """Vacía el historial de eventos de la base de datos."""
-    event_store.clear_events()
+    """Elimina los eventos del vídeo actual y deja de tenerlo como vídeo activo."""
+    event_store.clear_events(video=current_video[0])
+    current_video[0] = None
     return {"status": "cleared"}

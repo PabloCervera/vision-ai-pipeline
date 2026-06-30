@@ -97,6 +97,8 @@ vision-ai-pipeline/
 │   └── utils.py                 # Paleta de colores para anotaciones
 ├── dashboard.py                 # Interfaz Streamlit
 ├── data/                        # Datos generados en ejecución (no versionado)
+├── tests/                       # Tests unitarios (pytest)
+├── pytest.ini
 ├── requirements.txt
 └── README.md
 ```
@@ -164,11 +166,20 @@ Desde el dashboard puedes **subir un vídeo**, **iniciar y detener** el procesam
 | `/start`         | POST      | Inicia el pipeline (en un hilo) sobre la ruta indicada.          |
 | `/stop`          | POST      | Detiene el pipeline en ejecución.                                |
 | `/status`        | GET       | Estado del pipeline (`running`/`stopped`) y nº total de eventos. |
-| `/events`        | GET       | Lista de eventos almacenados.                                    |
-| `/clear_events`  | POST      | Vacía el historial de eventos.                                   |
-| `/ask`           | POST      | Pregunta sobre los eventos; responde vía `QAChain`.              |
+| `/progress`      | GET       | Avance del procesamiento (frames procesados, total y porcentaje).|
+| `/events`        | GET       | Eventos del vídeo actual.                                        |
+| `/clear_events`  | POST      | Elimina los eventos del vídeo actual.                            |
+| `/ask`           | POST      | Pregunta sobre los eventos del vídeo actual; responde vía `QAChain`. |
 | `/latest_frame`  | GET       | Último frame anotado (JPEG).                                     |
 | `/stream`        | WebSocket | Streaming de frames anotados en tiempo real.                     |
+
+### Tests
+
+```bash
+pytest
+```
+
+Tests unitarios de la lógica de dominio (detección de objetos estáticos y persistencia de eventos), sin dependencias externas (usan SQLite en memoria y stubs de tracks).
 
 ---
 
@@ -196,7 +207,7 @@ El desarrollo está organizado por sprints (ver historial de commits):
 
 - [ ] Integrar un bot de Telegram para notificaciones.
 - [ ] Empaquetado con Docker.
-- [ ] Tests automatizados (`pytest` ya está en dependencias).
+- [ ] Ampliar la cobertura de tests (lógica de riesgo del agente con mocks).
 
 ---
 

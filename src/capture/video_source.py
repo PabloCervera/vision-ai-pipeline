@@ -61,6 +61,18 @@ class VideoSource:
             raise VideoSourceError("No se pudo leer un frame de la fuente.")
         return frame
 
+    def frame_count(self):
+        """
+        Devuelve el número total de frames del vídeo.
+
+        Returns:
+            int: Total de frames, o 0 si no se conoce (p. ej. webcam o stream RTSP).
+        """
+        if not self._cap:
+            return 0
+        total = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        return total if total > 0 else 0
+
     def __enter__(self):
         return self.open()
 
